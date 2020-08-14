@@ -1,0 +1,48 @@
+filename = pll_uart_mirror
+pcf_file = ../../io.pcf
+
+ICELINK_DIR=$(shell df | grep iCELink | awk '{print $$6}')
+# ICELINK_DIR= df | grep iCELink | awk '{print $9}'
+${warning iCELink path: $(ICELINK_DIR)}
+
+build:
+	yosys -p "synth_ice40 -blif $(filename).blif" $(filename).v
+	#yosys -p 'synth_ice40 -top top -json pll_uart_mirror.json' pll_uart_mirror.v
+	arachne-pnr -d 5k -P sg48 -p $(pcf_file) $(filename).blif -o $(filename).asc
+	#nextpnr-ice40 --up5k --json pll_uart_mirror.json --pcf $(pcf_file) --asc pll_uart_mirror.asc
+	icepack $(filename).asc $(filename).bin
+
+pf:
+	icesprog  $(filename).bin 
+
+#simulator
+sl:
+	echo "开始编译"
+	yosys -p "synth_ice40 -blif $(filename).blif" $(filename).v
+	# yosys -p 'read_blif -wideports $(filename).blif; write_verilog $(filename)_syn.v'
+	yosys -o $(filename)_syn.v $(filename).blif
+	iverilog -o $(filename)_syntb $(filename)_tb.v $(filename)_syn.v `yosys-config --datdir/ice40/cells_sim.v`
+	vvp -N $(filename)_syntb +vcd=$(filename)_syntb.vcd
+	# vvp -n $(filename)_syntb -lxt2
+	# mv $(filename)_syntb.vcd $(filename)_syntb.lxt
+	echo "编译完成"
+	# vvp -n wave -lxt2
+	echo "生成波形文件"
+	# cp wave.vcd wave.lxt
+	echo "打开波形文件"
+	# open *.wave
+	# gtkwave wave.lxt
+
+
+prog_flash:
+	@if [ -d '$(ICELINK_DIR)' ]; \
+        then \
+            cp $(filename).bin $(ICELINK_DIR); \
+        else \
+            echo "iCELink not found, exit"; \
+            exit 1; \
+    fi
+
+
+clean:
+	rm -rf $(filename).blif $(filename).asc $(filename).bin wav
